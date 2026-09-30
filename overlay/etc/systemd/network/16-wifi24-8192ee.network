@@ -1,0 +1,12 @@
+# 2.4 GHz Wi-Fi (RTL8192EE). Fallback wireless link.
+[Match]
+Driver=rtl8192ee
+[Link]
+RequiredForOnline=no
+[Network]
+DHCP=yes
+MulticastDNS=yes
+[DHCPv4]
+RouteMetric=600
+[IPv6AcceptRA]
+RouteMetric=600

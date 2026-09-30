@@ -1,0 +1,11 @@
+[Unit]
+Description=QuaStation first-boot tasks (ssh host keys, swapfile, Wi-Fi import from BOOT)
+DefaultDependencies=no
+After=local-fs.target systemd-udev-settle.service
+Before=ssh.service network.target
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/qua-firstboot.sh
+[Install]
+WantedBy=sysinit.target

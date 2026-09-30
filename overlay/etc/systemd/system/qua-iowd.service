@@ -1,0 +1,26 @@
+[Unit]
+Description=QuaStation root I/O hang watchdog (2026-09-21)
+Documentation=file:/usr/local/bin/qua-iowd.sh
+DefaultDependencies=no
+After=local-fs.target
+Before=multi-user.target
+Conflicts=shutdown.target
+Before=shutdown.target
+
+[Service]
+Type=simple
+ExecStartPre=/bin/mkdir -p /var/lib/qua-iowd
+ExecStartPre=-/bin/rm -f /run/qua-iowd.fifo
+ExecStartPre=/bin/mkfifo /run/qua-iowd.fifo
+ExecStart=/usr/local/bin/qua-iowd.sh
+Restart=always
+RestartSec=10
+# ハング中に OOM killer や cgroup 制御に巻き込まれないようにする
+OOMScoreAdjust=-1000
+Nice=-5
+# 監視対象が rootfs なので、ここで I/O 制限をかけない
+IOSchedulingClass=realtime
+IOSchedulingPriority=0
+
+[Install]
+WantedBy=multi-user.target

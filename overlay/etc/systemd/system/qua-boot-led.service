@@ -1,0 +1,15 @@
+[Unit]
+# 前面右の2色LED: 起動中=赤(DTの default-state="on") -> 起動完了=緑
+# 赤はカーネルの gpio-leds probe 時点から点く。ここで緑へ切り替える。
+Description=QuaStation boot indicator LED (hdd_led: red -> green)
+After=multi-user.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/sh -c "echo 0 > /sys/class/leds/hdd_led_r/brightness; echo 1 > /sys/class/leds/hdd_led_g/brightness; echo 0 > /sys/class/leds/lte_led_r/brightness"
+# シャットダウン時は緑を消して赤に戻す(落ちている最中が分かる)
+ExecStop=/bin/sh -c "echo 0 > /sys/class/leds/hdd_led_g/brightness; echo 1 > /sys/class/leds/hdd_led_r/brightness"
+
+[Install]
+WantedBy=multi-user.target

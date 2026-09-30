@@ -1,0 +1,17 @@
+[Unit]
+Description=QuaStation: mux uart1 pins (Bluetooth H5) from GPIO to uart1
+Documentation=https://github.com/kisgezenguz/linux-4.9
+# mainline 6.18 には RTD1295 の pinctrl ドライバが無いため、起動ごとに
+# 0x98007310 を書いて uart1 のピンを有効化する。設定は揮発する。
+DefaultDependencies=no
+After=systemd-modules-load.service
+Before=rtk-bluetooth.service sysinit.target
+ConditionPathExists=/proc/device-tree/compatible
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/qua-uart1-pinmux.py
+
+[Install]
+WantedBy=sysinit.target

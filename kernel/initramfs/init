@@ -1,0 +1,58 @@
+#!/bin/sh
+# QuaStation (RTD1295) built-in initramfs — distribution version (2026-10-01)
+# Finds the root filesystem by LABEL= / PARTUUID= / device path given in the kernel
+# cmdline (default: root=LABEL=qua-root), kicks the SATA PHY/AHCI probe (which
+# otherwise stays deferred until after switch_root), and hands over to systemd.
+export PATH=/bin
+mkdir -p /dev /proc /sys /mnt /tmp
+[ -c /dev/console ] || mknod /dev/console c 5 1
+mount -t proc proc /proc; mount -t sysfs sysfs /sys; mount -t devtmpfs devtmpfs /dev
+mkdir -p /sys/fs/pstore; mount -t pstore pstore /sys/fs/pstore 2>/dev/null
+log() { echo "[qua-init] $*" > /dev/kmsg; }
+log "up $(cat /proc/uptime)"
+# Front-left LED (lte_led_r) on = initramfs reached. qua-boot-led.service turns it off later.
+L=/sys/class/leds/lte_led_r
+[ -d $L ] && echo 1 > $L/brightness 2>/dev/null
+# USB port1/2 VBUS = misc GPIO 19 high (4.9 rtk_usb_manager equivalent, MMIO poke)
+if [ -x /bin/devmem ]; then
+  DIR=$(devmem 0x9801b100 32); DATO=$(devmem 0x9801b110 32)
+  devmem 0x9801b100 32 $(( DIR | 0x80000 )); devmem 0x9801b110 32 $(( DATO | 0x80000 ))
+  log "misc gpio19 vbus set"
+fi
+# root= parsing: LABEL=xxx | PARTUUID=xxx | /dev/xxx   (default LABEL=qua-root)
+ROOTSPEC=$(sed 's/^/ /' /proc/cmdline | sed -n 's/.* root=\([^ ]*\).*/\1/p')
+[ -n "$ROOTSPEC" ] || ROOTSPEC=LABEL=qua-root
+log "looking for root=$ROOTSPEC"
+kick_sata() { for d in 9803ff00.sata-phy 9803f000.sata; do echo "$d" > /sys/bus/platform/drivers_probe 2>/dev/null; done; }
+mount -t debugfs debugfs /sys/kernel/debug 2>/dev/null
+kick_sata
+find_root() {
+  case "$ROOTSPEC" in
+    LABEL=*|UUID=*|PARTUUID=*) findfs "$ROOTSPEC" 2>/dev/null ;;
+    /dev/*) [ -b "$ROOTSPEC" ] && echo "$ROOTSPEC" ;;
+  esac
+}
+ROOT=""; i=0
+while [ $i -lt 90 ]; do
+  ROOT=$(find_root); [ -n "$ROOT" ] && break
+  case $i in 8|20|35|60) log "still waiting ($i s), blk: $(ls /sys/class/block 2>/dev/null | tr '\n' ' ')"; kick_sata ;; esac
+  sleep 1; i=$((i+1))
+done
+log "root=$ROOT after ${i}s"
+if [ -n "$ROOT" ] && mount -t ext4 -o rw "$ROOT" /mnt 2>/dev/kmsg; then
+  # usrmerge repair: if /lib was turned into a real directory by a careless tar, fix it
+  if [ ! -L /mnt/lib ] && [ -d /mnt/lib ] && [ -d /mnt/usr/lib ]; then
+    log "repairing /lib -> usr/lib"
+    mkdir -p /mnt/usr/lib/modules
+    for m in /mnt/lib/modules/*; do [ -d "$m" ] && { rm -rf "/mnt/usr/lib/modules/$(basename $m)"; mv "$m" /mnt/usr/lib/modules/; }; done
+    rm -rf /mnt/lib && ln -s usr/lib /mnt/lib && sync
+  fi
+  mkdir -p /mnt/var/log/qua-initramfs
+  dmesg > /mnt/var/log/qua-initramfs/dmesg.txt 2>&1; cp -a /sys/fs/pstore/. /mnt/var/log/qua-initramfs/ 2>/dev/null; sync
+  umount /sys/fs/pstore 2>/dev/null
+  log "switch_root to systemd"; sync
+  exec switch_root /mnt /sbin/init
+fi
+log "root not found or mount failed; halting here (check SSD label / cable)"
+# blink the front-left LED forever = root not found
+while :; do echo 0 > $L/brightness 2>/dev/null; sleep 1; echo 1 > $L/brightness 2>/dev/null; sleep 1; done

@@ -1,0 +1,15 @@
+Wi-Fi is not configured by default.  Two ways to enable it:
+
+1. Put a file named  wpa_supplicant.conf  on the BOOT partition (the FAT32 USB stick
+   that holds uImage).  On the next boot it is copied to
+   /etc/wpa_supplicant/wpa_supplicant-wlan0.conf and -wlan1.conf and the
+   wpa_supplicant@wlan0/@wlan1 services are enabled.  Then the file is renamed to
+   wpa_supplicant.conf.imported on the BOOT partition.
+
+2. Log in over the wired adapter and do it by hand:
+     sudo cp /etc/wpa_supplicant/wpa_supplicant.conf.example /etc/wpa_supplicant/wpa_supplicant-wlan0.conf
+     sudo cp /etc/wpa_supplicant/wpa_supplicant-wlan0.conf /etc/wpa_supplicant/wpa_supplicant-wlan1.conf
+     sudo systemctl enable --now wpa_supplicant@wlan0 wpa_supplicant@wlan1
+
+Both wlan0 (5 GHz RTL8812AE) and wlan1 (2.4 GHz RTL8192EE) use the same file; interface
+numbering can swap between boots, which is why both are configured.

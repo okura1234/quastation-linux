@@ -1,0 +1,25 @@
+[Unit]
+Description=Realtek RTL8761ATV Bluetooth (rtk_hciattach on /dev/ttyS1, H5)
+# 2026-09-20: 6.18/Ubuntu26.04 へ移植。FW=/lib/firmware/rtlbt/rtl8761a_fw
+# (sha256 6eb24b03… = eMMC旧Androidの rtl8761at_fw と同一・tsukumijima版とも一致)
+# mainline btrtl 用に /lib/firmware/rtl_bt/rtl8761a_fw.bin も同じ実体で配置済み。
+# 2026-09-20(2): pinmux サービスの後に回し、再起動レート制限を明示。
+#   🔴 StartLimitIntervalSec を書かないと既定の窓が 10秒で、RestartSec=10 とほぼ同じため
+#      失敗カウンタが積み上がらず StartLimitBurst に到達しない＝GPIO63 の電源リセットを
+#      10秒おきに無期限に繰り返す。窓を 60秒にして「5回で諦める」を実際に効かせる。
+Documentation=https://github.com/kisgezenguz/linux-4.9
+Before=bluetooth.service
+After=dev-ttyS1.device qua-uart1-pinmux.service
+Wants=qua-uart1-pinmux.service
+ConditionPathExists=/dev/ttyS1
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/rtk-bt-attach.sh
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

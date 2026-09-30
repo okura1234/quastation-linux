@@ -1,0 +1,15 @@
+# USB Ethernet adapter (Realtek RTL8152/8153, driver r8152) = the default first-boot path.
+# DHCP first; 192.168.1.44/24 is added as a fallback address for direct PC-to-box cabling.
+# Match by Driver=, never by Name= (interface names are not stable across boots).
+[Match]
+Driver=r8152
+[Link]
+RequiredForOnline=no
+[Network]
+DHCP=yes
+MulticastDNS=yes
+Address=192.168.1.44/24
+[DHCPv4]
+RouteMetric=20
+[IPv6AcceptRA]
+RouteMetric=20
