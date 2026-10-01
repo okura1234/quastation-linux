@@ -5,7 +5,7 @@
 au **Qua Station (HVD1, Realtek RTD1295)** を、ベンダー 4.9 カーネルではなく **mainline 系 Linux 6.18 LTS** と
 **Ubuntu 26.04 (arm64)** で動かすための配布セットです。ハードウェアはひととおり Linux から使える状態にしてあります。
 
-[English README](README.en.md)
+[English README](README.en.md) ／ 解説記事（導入手順）: [Qiita 導入記録（6）配布イメージ公開編](https://qiita.com/kaz32/items/9984c6e11d5331066a3e)
 
 ## 何が動くか
 

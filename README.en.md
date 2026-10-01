@@ -5,6 +5,8 @@
 Distribution kit that runs the au **Qua Station (HVD1, Realtek RTD1295)** on a **mainline-based Linux 6.18 LTS** kernel with
 **Ubuntu 26.04 (arm64)** instead of the vendor 4.9 kernel. All on-board hardware that is reachable from Linux is enabled.
 
+Japanese walkthrough: [Qiita (6)](https://qiita.com/kaz32/items/9984c6e11d5331066a3e)
+
 ## Hardware status
 CPU 4× A53 / 2 GB ✅ · SATA bay ✅ (root lives here, found by `LABEL=qua-root`) · USB 3.0 ×2 + USB 2.0 ✅ · Wi-Fi 5 GHz RTL8812AE ✅ (`rtl8821ae`) ·
 Wi-Fi 2.4 GHz RTL8192EE ✅ (rx can stick at 1 Mbps) · Bluetooth RTL8761ATV ✅ (auto pinmux + `rtk_hciattach`) · LTE modem 🟡 (detected, SIM untested) ·
