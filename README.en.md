@@ -1,5 +1,7 @@
 # Qua Station (au HVD1 / RTD1295) — mainline Linux 6.18 + Ubuntu 26.04
 
+> ⚠️ **Status: v0.1 (pre-release).** Rebuilt from a running unit (same kernel config, same DTB, hand-built rootfs of the same shape), but **this exact image has not yet been boot-tested on hardware**. Reports welcome via Issues.
+
 Distribution kit that runs the au **Qua Station (HVD1, Realtek RTD1295)** on a **mainline-based Linux 6.18 LTS** kernel with
 **Ubuntu 26.04 (arm64)** instead of the vendor 4.9 kernel. All on-board hardware that is reachable from Linux is enabled.
 
@@ -37,7 +39,7 @@ PCIe IRQ chatter from the 5 GHz card in `dmesg`. 2.4 GHz rx may stick at 1 Mbps.
 No eMMC boot (vendor U-Boot 2015.07 reads only USB `uImage`/`QuaStation.dtb`; a serial console is needed to change `bootcmd`). Timezone defaults to UTC.
 
 ## Build it yourself
-`build/build-kernel.sh <monarch-6.18 fork, branch qua-dist> out/kernel` then
+`build/build-kernel.sh <okura1234/monarch-6.18, branch qua-dist> out/kernel` then
 `sudo build/build-rootfs.sh ubuntu-base-26.04.1-base-arm64.tar.gz out/kernel/modules/lib/modules/6.18.52-qua1+ out/rootfs` (needs qemu-user-binfmt on x86).
 `DIST_USER`/`DIST_PASS` override the default account.
 

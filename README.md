@@ -1,5 +1,7 @@
 # Qua Station (au HVD1 / RTD1295) — mainline Linux 6.18 + Ubuntu 26.04
 
+> ⚠️ **状態: v0.1 (pre-release)**。この配布セットは稼働中の実機（同じカーネル設定・同じ DTB・同じ構成の手組み rootfs）から再構成したものですが、**配布イメージそのものでの実機起動はまだ検証していません**。試した結果は Issue で知らせてもらえると助かります。
+
 au **Qua Station (HVD1, Realtek RTD1295)** を、ベンダー 4.9 カーネルではなく **mainline 系 Linux 6.18 LTS** と
 **Ubuntu 26.04 (arm64)** で動かすための配布セットです。ハードウェアはひととおり Linux から使える状態にしてあります。
 
@@ -81,7 +83,7 @@ uart1 のピンを有効化し、`rtk-bluetooth.service` が `rtk_hciattach` で
 ## 自分でビルドする
 ```bash
 # カーネル（ホスト: Ubuntu 26.04 x86_64, gcc-aarch64-linux-gnu）
-git clone -b qua-dist https://github.com/<fork>/monarch-6.18 linux-qua   # symops/monarch-6.18 の fork
+git clone -b qua-dist https://github.com/okura1234/monarch-6.18 linux-qua   # symops/monarch-6.18 の fork
 build/build-kernel.sh linux-qua out/kernel
 # rootfs（qemu-user-binfmt が必要）
 sudo build/build-rootfs.sh ubuntu-base-26.04.1-base-arm64.tar.gz out/kernel/modules/lib/modules/6.18.52-qua1+ out/rootfs
