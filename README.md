@@ -23,6 +23,14 @@ au **Qua Station (HVD1, Realtek RTD1295)** を、ベンダー 4.9 カーネル�
 | 内蔵 GMAC | — | 筐体に RJ45 が無い個体がほとんど。ドライバは載るが link down のまま |
 | Mali GPU | — | ヘッドレス前提。未対応 |
 
+
+## 🧪 Linux 7.2 への移植（実験的・2026-10-18）
+
+mainline **7.2.11** でも起動・稼働することを実機で確認しました（SATA root・USB・RTL-SDR・Bluetooth・Wi-Fi 5 GHz・Docker 13 コンテナ）。
+パッチ列と config は [`kernel/patches-7.2.11/`](kernel/patches-7.2.11/) にあります。
+Wi-Fi が起動時に無言ハングする問題は上流 rtlwifi の `WQ_UNBOUND` 化が原因で、`0005` のパッチで回避しています。
+配布イメージ（uImage/rootfs）は引き続き 6.18 系です。
+
 ## 配布物
 
 | ファイル | 内容 |
@@ -83,7 +91,7 @@ uart1 のピンを有効化し、`rtk-bluetooth.service` が `rtk_hciattach` で
 ## 自分でビルドする
 ```bash
 # カーネル（ホスト: Ubuntu 26.04 x86_64, gcc-aarch64-linux-gnu）
-git clone -b qua-dist https://github.com/okura1234/monarch-6.18 linux-qua   # symops/monarch-6.18 の fork
+git clone -b qua-dist-6.18.56 https://github.com/okura1234/monarch-6.18 linux-qua   # symops/monarch-6.18 の fork（6.18.56 追従版。旧 qua-dist は 6.18.52）
 build/build-kernel.sh linux-qua out/kernel
 # rootfs（qemu-user-binfmt が必要）
 sudo build/build-rootfs.sh ubuntu-base-26.04.1-base-arm64.tar.gz out/kernel/modules/lib/modules/6.18.52-qua1+ out/rootfs

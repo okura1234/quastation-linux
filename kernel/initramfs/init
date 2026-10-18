@@ -28,7 +28,13 @@ mount -t debugfs debugfs /sys/kernel/debug 2>/dev/null
 kick_sata
 find_root() {
   case "$ROOTSPEC" in
-    LABEL=*|UUID=*|PARTUUID=*) findfs "$ROOTSPEC" 2>/dev/null ;;
+    LABEL=*|UUID=*) findfs "$ROOTSPEC" 2>/dev/null ;;
+    # busybox findfs knows only LABEL=/UUID= (実測 2026-10-18: PARTUUID= は usage を出して exit 1)。
+    # 本番機の cmdline は root=PARTUUID=20a83e9c-04 なので /sys の uevent から引く（run31-35 の方式に戻す）
+    PARTUUID=*) pu=${ROOTSPEC#PARTUUID=}
+                for p in /sys/class/block/*/uevent; do
+                  grep -q "^PARTUUID=$pu\$" "$p" 2>/dev/null && { echo /dev/$(basename $(dirname $p)); return; }
+                done ;;
     /dev/*) [ -b "$ROOTSPEC" ] && echo "$ROOTSPEC" ;;
   esac
 }

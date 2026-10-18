@@ -1,0 +1,331 @@
+From 7c50b846262742453205d1dc26c16faf0424c585 Mon Sep 17 00:00:00 2001
+From: kazu <kazu@dynabook.local>
+Date: Sun, 18 Oct 2026 20:59:40 +0900
+Subject: [PATCH 2/5] 7.2 port: clk determine_rate, i2c of_gpio.h, rsvmem
+ fdt_node, pcie msi_parent_ops
+
+---
+ drivers/clk/realtek/clk-rtd129x-scpu.c | 14 +++---
+ drivers/i2c/busses/i2c-rtk.c           |  1 -
+ drivers/pci/controller/Kconfig         | 16 +++++++
+ drivers/pci/controller/pcie-rtd129x.c  | 63 +++++++++++---------------
+ drivers/soc/realtek/rtk-memory-remap.c | 11 ++++-
+ 5 files changed, 60 insertions(+), 45 deletions(-)
+
+diff --git a/drivers/clk/realtek/clk-rtd129x-scpu.c b/drivers/clk/realtek/clk-rtd129x-scpu.c
+index 512ea3637..575413ebf 100644
+--- a/drivers/clk/realtek/clk-rtd129x-scpu.c
++++ b/drivers/clk/realtek/clk-rtd129x-scpu.c
+@@ -167,21 +167,23 @@ static const struct rtd129x_scpu_freq *rtd129x_scpu_find_freq_by_val(u32 val)
+ 	return NULL;
+ }
+ 
+-static long rtd129x_scpu_clk_round_rate(struct clk_hw *hw, unsigned long rate,
+-					 unsigned long *parent_rate)
++/* 7.x: clk_ops.round_rate was removed; the same lookup now answers .determine_rate */
++static int rtd129x_scpu_clk_determine_rate(struct clk_hw *hw,
++					   struct clk_rate_request *req)
+ {
+ 	const struct rtd129x_scpu_div *dv;
+ 	const struct rtd129x_scpu_freq *fv;
+ 
+-	dv = rtd129x_scpu_find_div(rate);
++	dv = rtd129x_scpu_find_div(req->rate);
+ 	if (!dv)
+ 		return -EINVAL;
+ 
+-	fv = rtd129x_scpu_find_freq(rate * dv->div);
++	fv = rtd129x_scpu_find_freq(req->rate * dv->div);
+ 	if (!fv)
+ 		return -EINVAL;
+ 
+-	return fv->rate / dv->div;
++	req->rate = fv->rate / dv->div;
++	return 0;
+ }
+ 
+ static unsigned long rtd129x_scpu_clk_recalc_rate(struct clk_hw *hw,
+@@ -257,7 +259,7 @@ static int rtd129x_scpu_clk_set_rate(struct clk_hw *hw, unsigned long rate,
+ }
+ 
+ static const struct clk_ops rtd129x_scpu_clk_ops = {
+-	.round_rate  = rtd129x_scpu_clk_round_rate,
++	.determine_rate = rtd129x_scpu_clk_determine_rate,
+ 	.recalc_rate = rtd129x_scpu_clk_recalc_rate,
+ 	.set_rate    = rtd129x_scpu_clk_set_rate,
+ };
+diff --git a/drivers/i2c/busses/i2c-rtk.c b/drivers/i2c/busses/i2c-rtk.c
+index d11338406..1f9fd5766 100644
+--- a/drivers/i2c/busses/i2c-rtk.c
++++ b/drivers/i2c/busses/i2c-rtk.c
+@@ -19,7 +19,6 @@
+ #include <linux/clk.h>
+ #include <linux/reset.h>
+ #include <linux/delay.h>
+-#include <linux/of_gpio.h>
+ #include <linux/string.h>
+ 
+ /* vendor bus-recovery uses pinctrl + legacy GPIO numbers */
+diff --git a/drivers/pci/controller/Kconfig b/drivers/pci/controller/Kconfig
+index e832e27f4..48d2d2ab5 100644
+--- a/drivers/pci/controller/Kconfig
++++ b/drivers/pci/controller/Kconfig
+@@ -12,6 +12,7 @@ config PCI_AARDVARK
+ 	depends on (ARCH_MVEBU && ARM64) || COMPILE_TEST
+ 	depends on OF
+ 	depends on PCI_MSI
++	select IRQ_MSI_LIB
+ 	select PCI_BRIDGE_EMUL
+ 	select IRQ_MSI_LIB
+ 	help
+@@ -31,6 +32,7 @@ config PCIE_ALTERA_MSI
+ 	depends on PCIE_ALTERA
+ 	depends on PCI_MSI
+ 	select IRQ_MSI_LIB
++	select IRQ_MSI_LIB
+ 	help
+ 	  Say Y here if you want PCIe MSI support for the Altera FPGA.
+ 	  This MSI driver supports Altera MSI to GIC controller IP.
+@@ -45,6 +47,7 @@ config PCIE_APPLE
+ 	depends on ARCH_APPLE || COMPILE_TEST
+ 	depends on OF
+ 	depends on PCI_MSI
++	select IRQ_MSI_LIB
+ 	select PCI_HOST_COMMON
+ 	select IRQ_MSI_LIB
+ 	help
+@@ -64,6 +67,7 @@ config PCIE_ASPEED
+ 	depends on OF
+ 	depends on PCI_MSI
+ 	select IRQ_MSI_LIB
++	select IRQ_MSI_LIB
+ 	help
+ 	  Enable this option to support the PCIe controller found on ASPEED
+ 	  SoCs.
+@@ -81,6 +85,7 @@ config PCIE_BRCMSTB
+ 	depends on OF
+ 	depends on PCI_MSI
+ 	select IRQ_MSI_LIB
++	select IRQ_MSI_LIB
+ 	default ARCH_BRCMSTB || BMIPS_GENERIC
+ 	help
+ 	  Say Y here to enable PCIe host controller support for
+@@ -118,6 +123,7 @@ config PCIE_IPROC_MSI
+ 	depends on PCIE_IPROC_PLATFORM || PCIE_IPROC_BCMA
+ 	depends on PCI_MSI
+ 	select IRQ_MSI_LIB
++	select IRQ_MSI_LIB
+ 	default ARCH_BCM_IPROC
+ 	help
+ 	  Say Y here if you want to enable MSI support for Broadcom's iProc
+@@ -213,6 +219,7 @@ config PCIE_MEDIATEK
+ 	depends on OF
+ 	depends on PCI_MSI
+ 	select IRQ_MSI_LIB
++	select IRQ_MSI_LIB
+ 	help
+ 	  Say Y here if you want to enable PCIe controller support on
+ 	  MediaTek SoCs.
+@@ -222,6 +229,7 @@ config PCIE_MEDIATEK_GEN3
+ 	depends on ARCH_AIROHA || ARCH_MEDIATEK || COMPILE_TEST
+ 	depends on PCI_MSI
+ 	select IRQ_MSI_LIB
++	select IRQ_MSI_LIB
+ 	select PCI_PWRCTRL_GENERIC
+ 	help
+ 	  Adds support for PCIe Gen3 MAC controller for MediaTek SoCs.
+@@ -253,6 +261,7 @@ config PCI_TEGRA
+ 	depends on ARCH_TEGRA || COMPILE_TEST
+ 	depends on PCI_MSI
+ 	select IRQ_MSI_LIB
++	select IRQ_MSI_LIB
+ 	help
+ 	  Say Y here if you want support for the PCIe host controller found
+ 	  on NVIDIA Tegra SoCs.
+@@ -263,6 +272,7 @@ config PCIE_RCAR_HOST
+ 	depends on OF
+ 	depends on PCI_MSI
+ 	select IRQ_MSI_LIB
++	select IRQ_MSI_LIB
+ 	help
+ 	  Say Y here if you want PCIe controller support on R-Car SoCs in host
+ 	  mode.
+@@ -301,6 +311,7 @@ config PCIE_ROCKCHIP_HOST
+ 	depends on ARCH_ROCKCHIP || COMPILE_TEST
+ 	depends on OF
+ 	depends on PCI_MSI
++	select IRQ_MSI_LIB
+ 	select MFD_SYSCON
+ 	select PCIE_ROCKCHIP
+ 	help
+@@ -313,6 +324,7 @@ config PCIE_RTD129X
+ 	depends on (ARM64 && ARCH_REALTEK) || COMPILE_TEST
+ 	depends on OF
+ 	depends on PCI_MSI
++	select IRQ_MSI_LIB
+ 	select MFD_SYSCON
+ 	help
+ 	  Say Y here if you want to enable PCIe controller support on
+@@ -350,6 +362,7 @@ config PCI_XGENE_MSI
+ 	depends on PCI_XGENE
+ 	depends on PCI_MSI
+ 	select IRQ_MSI_LIB
++	select IRQ_MSI_LIB
+ 	default y
+ 	help
+ 	  Say Y here if you want PCIe MSI support for the APM X-Gene v1 SoC.
+@@ -360,6 +373,7 @@ config PCIE_XILINX
+ 	depends on OF
+ 	depends on PCI_MSI
+ 	select IRQ_MSI_LIB
++	select IRQ_MSI_LIB
+ 	help
+ 	  Say 'Y' here if you want kernel to support the Xilinx AXI PCIe
+ 	  Host Bridge driver.
+@@ -368,6 +382,7 @@ config PCIE_XILINX_DMA_PL
+ 	bool "Xilinx DMA PL PCIe host bridge support"
+ 	depends on ARCH_ZYNQMP || COMPILE_TEST
+ 	depends on PCI_MSI
++	select IRQ_MSI_LIB
+ 	select PCI_HOST_COMMON
+ 	select IRQ_MSI_LIB
+ 	help
+@@ -381,6 +396,7 @@ config PCIE_XILINX_NWL
+ 	depends on ARCH_ZYNQMP || COMPILE_TEST
+ 	depends on PCI_MSI
+ 	select IRQ_MSI_LIB
++	select IRQ_MSI_LIB
+ 	help
+ 	 Say 'Y' here if you want kernel support for Xilinx
+ 	 NWL PCIe controller. The controller can act as Root Port
+diff --git a/drivers/pci/controller/pcie-rtd129x.c b/drivers/pci/controller/pcie-rtd129x.c
+index 334932988..82b76a5f0 100644
+--- a/drivers/pci/controller/pcie-rtd129x.c
++++ b/drivers/pci/controller/pcie-rtd129x.c
+@@ -19,6 +19,7 @@
+ #include <linux/mfd/syscon.h>
+ #include <linux/module.h>
+ #include <linux/msi.h>
++#include <linux/irqchip/irq-msi-lib.h>
+ #include <linux/of.h>
+ #include <linux/of_irq.h>
+ #include <linux/of_pci.h>
+@@ -169,7 +170,6 @@ struct rtd129x_pcie_priv {
+ 	spinlock_t mmio_lock;	/* paged MMIO window (REG_PCI_TRANS/MASK) */
+ 	struct irq_domain *intx_irq_domain;
+ 	struct irq_domain *msi_irq_domain;
+-	struct irq_domain *msi_domain;
+ 	bool msi_allocated;
+ 	void *msi_data;
+ 	dma_addr_t msi_data_dma;
+@@ -363,29 +363,24 @@ static struct irq_chip rtd129x_pcie_msi_bottom_irq_chip = {
+ 	.irq_ack		= rtd129x_pcie_msi_ack,
+ };
+ 
+-static struct irq_chip rtd129x_pcie_msi_irq_chip = {
+-	.name		= "RTD129x PCIe MSI",
+-	.irq_ack	= irq_chip_ack_parent,
+-	.irq_mask	= pci_msi_mask_irq,
+-	.irq_unmask	= pci_msi_unmask_irq,
+-};
+-
+-static struct msi_domain_info rtd129x_pcie_msi_domain_info = {
+-	/*
+-	 * run28e: MSI_FLAG_NO_AFFINITY is required. Without it
+-	 * msi_domain_update_chip_ops() (kernel/irq/msi.c) installs
+-	 * msi_domain_set_affinity() on the top chip because it has no
+-	 * .irq_set_affinity of its own, and that helper calls the *parent*
+-	 * chip's ->irq_set_affinity without a NULL check. The parent here
+-	 * only implements compose_msi_msg/ack, so the first request_irq()
+-	 * on an MSI (rtlwifi enables MSI by default) jumped to address 0
+-	 * and panicked. This controller has a single, non-steerable MSI
+-	 * line, so declaring "no affinity" is also what it actually is --
+-	 * same as pcie-altera-msi and friends.
+-	 */
+-	.flags	= MSI_FLAG_USE_DEF_DOM_OPS | MSI_FLAG_USE_DEF_CHIP_OPS |
+-		  MSI_FLAG_PCI_MSIX | MSI_FLAG_NO_AFFINITY,
+-	.chip	= &rtd129x_pcie_msi_irq_chip,
++/*
++ * 7.x: the per-controller "top" MSI domain (pci_msi_create_irq_domain +
++ * msi_domain_info) is gone; the controller only provides a parent domain
++ * and the generic PCI/MSI library builds the per-device domains on top.
++ * run28e's MSI_FLAG_NO_AFFINITY lesson carries over as a required flag:
++ * this controller has a single, non-steerable MSI line.
++ */
++#define RTD129X_MSI_FLAGS_REQUIRED (MSI_FLAG_USE_DEF_DOM_OPS | \
++				    MSI_FLAG_USE_DEF_CHIP_OPS | \
++				    MSI_FLAG_NO_AFFINITY)
++#define RTD129X_MSI_FLAGS_SUPPORTED (MSI_GENERIC_FLAGS_MASK | MSI_FLAG_PCI_MSIX)
++
++static const struct msi_parent_ops rtd129x_pcie_msi_parent_ops = {
++	.required_flags		= RTD129X_MSI_FLAGS_REQUIRED,
++	.supported_flags	= RTD129X_MSI_FLAGS_SUPPORTED,
++	.bus_select_token	= DOMAIN_BUS_PCI_MSI,
++	.prefix			= "RTD129x-",
++	.init_dev_msi_info	= msi_lib_init_dev_msi_info,
+ };
+ 
+ static int rtd129x_pcie_msi_domain_alloc(struct irq_domain *domain, unsigned int virq,
+@@ -717,26 +712,22 @@ static struct pci_ops rtd129x_pcie_ops = {
+ static int rtd129x_pcie_init_msi(struct rtd129x_pcie_priv *data)
+ {
+ 	dma_addr_t dma_handle;
+-
+-	data->msi_irq_domain = irq_domain_add_linear(NULL, 1,
+-						     &rtd129x_pcie_msi_domain_ops, data);
++	struct irq_domain_info info = {
++		.fwnode		= dev_fwnode(&data->pdev->dev),
++		.ops		= &rtd129x_pcie_msi_domain_ops,
++		.host_data	= data,
++		.size		= 1,
++	};
++
++	data->msi_irq_domain = msi_create_parent_irq_domain(&info, &rtd129x_pcie_msi_parent_ops);
+ 	if (!data->msi_irq_domain)
+ 		return -ENOMEM;
+ 
+-	data->msi_domain = pci_msi_create_irq_domain(data->pdev->dev.fwnode,
+-						     &rtd129x_pcie_msi_domain_info,
+-						     data->msi_irq_domain);
+-	if (!data->msi_domain) {
+-		irq_domain_remove(data->msi_irq_domain);
+-		return -ENOMEM;
+-	}
+-
+ 	/* diag: EPからのDMA書き込みをキャッシュのステイル読みなしで観測するため
+ 	 * coherent(uncached)割り当てにする。alloc_pages+page_address のキャッシャブルRAM
+ 	 * だと ram[0] の読みが古い値のままになりうる。 */
+ 	data->msi_data = dma_alloc_coherent(&data->pdev->dev, PAGE_SIZE, &dma_handle, GFP_KERNEL);
+ 	if (!data->msi_data) {
+-		irq_domain_remove(data->msi_domain);
+ 		irq_domain_remove(data->msi_irq_domain);
+ 		return -ENOMEM;
+ 	}
+diff --git a/drivers/soc/realtek/rtk-memory-remap.c b/drivers/soc/realtek/rtk-memory-remap.c
+index 0fef989a5..e4493863b 100644
+--- a/drivers/soc/realtek/rtk-memory-remap.c
++++ b/drivers/soc/realtek/rtk-memory-remap.c
+@@ -52,11 +52,18 @@ static int __init rtk_rsvmem_remap(struct reserved_mem *rmem)
+ 	const char *save;
+ 	struct rtk_rsvmem_map *m;
+ 	void __iomem *addr;
++	int rsv, node;
+ 
+-	if (!rmem || !rmem->size)
++	if (!rmem || !rmem->size || !rmem->name)
+ 		return 0;
+ 
+-	save = of_get_flat_dt_prop(rmem->fdt_node, "save_remap_name", NULL);
++	/*
++	 * 7.x: struct reserved_mem lost ->fdt_node. Re-find our node in the
++	 * flat tree by name under /reserved-memory (rmem->name is the unit name).
++	 */
++	rsv = of_get_flat_dt_subnode_by_name(of_get_flat_dt_root(), "reserved-memory");
++	node = rsv ? of_get_flat_dt_subnode_by_name(rsv, rmem->name) : -1;
++	save = node >= 0 ? of_get_flat_dt_prop(node, "save_remap_name", NULL) : NULL;
+ 	if (!save) {
+ 		pr_warn("rtk-rsvmem: %s: missing save_remap_name\n",
+ 			rmem->name ? rmem->name : "<unnamed>");
+-- 
+2.53.0
+

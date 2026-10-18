@@ -1,0 +1,26 @@
+From a05d280ea6f8bfeaf56711a880d095e0e71ac759 Mon Sep 17 00:00:00 2001
+From: kazu <kazu@dynabook.local>
+Date: Sun, 18 Oct 2026 22:54:34 +0900
+Subject: [PATCH 4/5] pcie-rtd129x: WQ_PERCPU for alloc_workqueue (7.x warns
+ when neither PERCPU nor UNBOUND is given)
+
+---
+ drivers/pci/controller/pcie-rtd129x.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/pci/controller/pcie-rtd129x.c b/drivers/pci/controller/pcie-rtd129x.c
+index 582952906..07f20423d 100644
+--- a/drivers/pci/controller/pcie-rtd129x.c
++++ b/drivers/pci/controller/pcie-rtd129x.c
+@@ -773,7 +773,7 @@ static int rtd129x_pcie_init_irq(struct rtd129x_pcie_priv *data)
+ 			return ret;
+ 	}
+ 
+-	data->wq = alloc_workqueue("rtd129x_pcie_wq", WQ_FREEZABLE | WQ_MEM_RECLAIM, 0);
++	data->wq = alloc_workqueue("rtd129x_pcie_wq", WQ_FREEZABLE | WQ_MEM_RECLAIM | WQ_PERCPU, 0);
+ 	INIT_WORK(&data->link_work, rtd129x_pcie_link_changed);
+ 
+ 	writel_relaxed(0, data->ctrl_base + REG_INT_CTR);
+-- 
+2.53.0
+

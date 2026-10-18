@@ -1,0 +1,26 @@
+From 9c7404dc84061426c53527841cf7afbda1150ddc Mon Sep 17 00:00:00 2001
+From: kazu <kazu@dynabook.local>
+Date: Sun, 18 Oct 2026 22:58:27 +0900
+Subject: [PATCH 5/5] rtlwifi: back to per-CPU workqueue (7x05 experiment;
+ rtw88 analogue was reverted upstream)
+
+---
+ drivers/net/wireless/realtek/rtlwifi/base.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/net/wireless/realtek/rtlwifi/base.c b/drivers/net/wireless/realtek/rtlwifi/base.c
+index 9e98c01bb..74e482bac 100644
+--- a/drivers/net/wireless/realtek/rtlwifi/base.c
++++ b/drivers/net/wireless/realtek/rtlwifi/base.c
+@@ -445,7 +445,7 @@ static int _rtl_init_deferred_work(struct ieee80211_hw *hw)
+ 	struct rtl_priv *rtlpriv = rtl_priv(hw);
+ 	struct workqueue_struct *wq;
+ 
+-	wq = alloc_workqueue("%s", WQ_UNBOUND, 0, rtlpriv->cfg->name);
++	wq = alloc_workqueue("%s", WQ_PERCPU, 0, rtlpriv->cfg->name);	/* 7x05: 6.18 までは flags=0(per-CPU)。rtw88 の同型変更は regression で revert 済み */
+ 	if (!wq)
+ 		return -ENOMEM;
+ 
+-- 
+2.53.0
+
