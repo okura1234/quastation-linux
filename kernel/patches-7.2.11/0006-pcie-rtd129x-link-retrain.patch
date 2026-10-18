@@ -1,0 +1,266 @@
+diff --git a/drivers/pci/controller/pcie-rtd129x.c b/drivers/pci/controller/pcie-rtd129x.c
+index 07f20423d..c32128d6b 100644
+--- a/drivers/pci/controller/pcie-rtd129x.c
++++ b/drivers/pci/controller/pcie-rtd129x.c
+@@ -176,6 +176,10 @@ struct rtd129x_pcie_priv {
+ 	struct hotplug_slot hotplug_slot;
+ 	struct workqueue_struct *wq;
+ 	struct work_struct link_work;
++	struct work_struct retrain_work;	/* 7x06: cfg timeout 連続時のリンク再トレーニング */
++	unsigned int cfg_timeouts;
++	unsigned long last_retrain;
++	bool retrain_armed;		/* pci_host_probe 完了後に true（初回列挙中は発火させない） */
+ 	int irq;
+ 	int gen;
+ 	u32 quirks;
+@@ -273,6 +277,65 @@ static void rtd129x_pcie_link_changed(struct work_struct *ws)
+ 	}
+ }
+ 
++static int rtd129x_pcie_link_bringup(struct rtd129x_pcie_priv *data);
++
++static void rtd129x_pcie_retrain_work(struct work_struct *ws)
++{
++	struct rtd129x_pcie_priv *data = container_of(ws, struct rtd129x_pcie_priv, retrain_work);
++	struct pci_host_bridge *bridge = pci_host_bridge_from_priv(data);
++	struct pci_dev *dev, *temp;
++	int ret;
++
++	if (time_before(jiffies, data->last_retrain + 10 * HZ)) {
++		dev_info(&data->pdev->dev, "retrain: rate limited\n");
++		return;
++	}
++	data->last_retrain = jiffies;
++	data->cfg_timeouts = 0;
++
++	dev_warn(&data->pdev->dev, "retrain: link lost (MAC_ST 0x%08x), resetting EP and retraining\n",
++		 readl_relaxed(data->ctrl_base + REG_MAC_ST));
++
++	/* 死んだデバイスを先に外す（EP をリセットするので config 状態は消える） */
++	pci_walk_bus(bridge->bus, pci_dev_set_disconnected, NULL);
++	pci_lock_rescan_remove();
++	list_for_each_entry_safe_reverse(dev, temp, &bridge->bus->devices, bus_list) {
++		pci_dev_get(dev);
++		pci_stop_and_remove_bus_device(dev);
++		pci_dev_put(dev);
++	}
++	pci_unlock_rescan_remove();
++
++	ret = rtd129x_pcie_link_bringup(data);
++	if (ret) {
++		dev_err(&data->pdev->dev, "retrain: link still down (%d)\n", ret);
++		return;
++	}
++	dev_info(&data->pdev->dev, "retrain: link up, rescanning slot\n");
++	data->cfg_timeouts = 0;
++	queue_work(data->wq, &data->link_work);
++}
++
++static ssize_t retrain_store(struct device *dev, struct device_attribute *attr,
++			     const char *buf, size_t count)
++{
++	struct rtd129x_pcie_priv *data = dev_get_drvdata(dev);
++
++	if (!data || !data->wq)
++		return -ENODEV;
++	data->last_retrain = jiffies - 11 * HZ;	/* 手動は即実行 */
++	queue_work(data->wq, &data->retrain_work);
++	return count;
++}
++static DEVICE_ATTR_WO(retrain);
++
++/* cfg アクセスの timeout が続いたら再トレーニングを予約する（atomic 文脈から呼ばれる） */
++static void rtd129x_pcie_note_cfg_timeout(struct rtd129x_pcie_priv *data)
++{
++	if (++data->cfg_timeouts >= 3 && data->wq && READ_ONCE(data->retrain_armed))
++		queue_work(data->wq, &data->retrain_work);
++}
++
+ static void rtd129x_pcie_irq_handle(struct irq_desc *desc)
+ {
+ 	struct rtd129x_pcie_priv *data = irq_desc_get_handler_data(desc);
+@@ -503,6 +566,7 @@ static int rtd129x_pcie_read_conf(struct pci_bus *bus, unsigned int devfn,
+ 	ret = readl_relaxed_poll_timeout_atomic(data->ctrl_base + REG_CFG_ST, val, (val & CFG_ST_DONE_ST), 10, 100000);
+ 	if (ret) {
+ 		dev_warn(&data->pdev->dev, "cfg read timed out (0x%08x)\n", val);
++		rtd129x_pcie_note_cfg_timeout(data);
+ 		ret = PCIBIOS_SET_FAILED;
+ 		goto out;
+ 	}
+@@ -511,6 +575,7 @@ static int rtd129x_pcie_read_conf(struct pci_bus *bus, unsigned int devfn,
+ 		ret = PCIBIOS_SET_FAILED;
+ 		goto out;
+ 	}
++	data->cfg_timeouts = 0;
+ 	val = readl_relaxed(data->ctrl_base + REG_CFG_RDATA);
+ 	mask = GENMASK(((where & 0x3) + size) * BITS_PER_BYTE - 1, (where & 0x3) * BITS_PER_BYTE);
+ 	*pval = (val & mask) >> ((where & 0x3) * BITS_PER_BYTE);
+@@ -585,6 +650,7 @@ static int rtd129x_pcie_write_conf(struct pci_bus *bus, unsigned int devfn,
+ 	ret = readl_relaxed_poll_timeout_atomic(data->ctrl_base + REG_CFG_ST, val, (val & CFG_ST_DONE_ST), 10, 50000);
+ 	if (ret) {
+ 		dev_warn(&data->pdev->dev, "cfg write timed out (0x%08x)\n", val);
++		rtd129x_pcie_note_cfg_timeout(data);
+ 		ret = PCIBIOS_SET_FAILED;
+ 		goto out;
+ 	}
+@@ -773,8 +839,9 @@ static int rtd129x_pcie_init_irq(struct rtd129x_pcie_priv *data)
+ 			return ret;
+ 	}
+ 
+-	data->wq = alloc_workqueue("rtd129x_pcie_wq", WQ_FREEZABLE | WQ_MEM_RECLAIM | WQ_PERCPU, 0);
++	data->wq = alloc_ordered_workqueue("rtd129x_pcie_wq", WQ_FREEZABLE | WQ_MEM_RECLAIM);	/* 7x06: link_work と retrain_work を直列化 */
+ 	INIT_WORK(&data->link_work, rtd129x_pcie_link_changed);
++	INIT_WORK(&data->retrain_work, rtd129x_pcie_retrain_work);
+ 
+ 	writel_relaxed(0, data->ctrl_base + REG_INT_CTR);
+ 
+@@ -789,6 +856,74 @@ static int rtd129x_pcie_init_irq(struct rtd129x_pcie_priv *data)
+ 	return 0;
+ }
+ 
++/*
++ * 7x06: リンクの立ち上げ（EP リセット → LTSSM → LINK_UP 待ち → ウィンドウ設定）。
++ * 列挙後に数秒でリンクが落ちる個体差（2.4GHz 側で 9 回中 3 回・6.18/7.2 共通）への
++ * 再トレーニング経路からも呼ぶので init から切り出した。
++ */
++static int rtd129x_pcie_link_bringup(struct rtd129x_pcie_priv *data)
++{
++	u32 val;
++	int ret;
++
++	/* after phy mdio set */
++	gpiod_direction_output(data->reset_gpiod, 1);
++	mdelay(100);
++	gpiod_direction_output(data->reset_gpiod, 0);
++
++	/* set to MMIO */
++	val = SYS_CTR_PHY_MDIO_OE | SYS_CTR_APP_LTSSM_EN;
++	if (false)
++		val |= SYS_CTR_MM_IO_TYPE_IO | SYS_CTR_DIR_CFG_EN;
++	else
++		val |= SYS_CTR_TRAN_EN | SYS_CTR_MM_IO_TYPE_MM | SYS_CTR_PHY_MDIO_RSTN | SYS_CTR_INDIR_CFG_EN;
++	writel(val, data->ctrl_base + REG_SYS_CTR);
++	mdelay(50);
++
++	/* #Link initial setting */
++	writel(0x00010120, data->ctrl_base + 0x710);
++
++	ret = readl_relaxed_poll_timeout(data->ctrl_base + REG_MAC_ST, val, (val & MAC_ST_XMLH_LINK_UP), 10, 60000);
++	if (ret) {
++		/*
++		 * run28: bail out like the vendor driver does (reset the block
++		 * and drop the clock) instead of returning success on a dead
++		 * link -- otherwise pci_host_probe() fires config reads into a
++		 * linkless port, and an indirect cfg cycle that never completes
++		 * can stall the whole boot. An empty slot must be harmless.
++		 */
++		dev_err(&data->pdev->dev, "link down (0x%08x)\n", val);
++		return -ENODEV;
++	}
++
++	writel_relaxed(data->cfg_res->start, data->ctrl_base + REG_PCI_BASE);
++	writel(~(resource_size(data->cfg_res) - 1), data->ctrl_base + REG_PCI_MASK);
++
++	if (data->trans_res)
++		writel(data->trans_res->start, data->ctrl_base + REG_PCI_TRANS);
++
++	dev_dbg(&data->pdev->dev, "base 0x%08x (0x%08x) -> 0x%08x\n",
++		readl_relaxed(data->ctrl_base + REG_PCI_BASE),
++		readl_relaxed(data->ctrl_base + REG_PCI_MASK),
++		readl_relaxed(data->ctrl_base + REG_PCI_TRANS));
++
++	/* Prevent PCIe hang if dllp error occurs */
++	val = FIELD_PREP(DIR_EN_TIMEOUT_CNT_VALUE,
++			 (data->info->cap & RTD129X_PCIE_CAP_PCIE_2_0) ? 0x10000 : 0x2000) |
++	      DIR_EN_TIMEOUT_EN;
++	writel_relaxed(val, data->ctrl_base + REG_DIR_EN);
++
++	val = readl_relaxed(data->ctrl_base + REG_PHY_CTR);
++	dev_info(&data->pdev->dev, "PHY_CTR 0x%08x\n", val);
++	val &= ~PHY_CTR_REG_PLLDVR;
++	val |= PHY_CTR_RX50_LINK | PHY_CTR_POW_PCIEX | PHY_CTR_REG_PLLDVR_ON_HOST;
++	writel_relaxed(val, data->ctrl_base + REG_PHY_CTR);
++
++	rtd129x_pcie_link_init(data);
++
++	return 0;
++}
++
+ static int rtd129x_pcie_init(struct rtd129x_pcie_priv *data)
+ {
+ 	u32 val;
+@@ -920,61 +1055,9 @@ static int rtd129x_pcie_init(struct rtd129x_pcie_priv *data)
+ 
+ 	}
+ 
+-	/* after phy mdio set */
+-	gpiod_direction_output(data->reset_gpiod, 1);
+-	mdelay(100);
+-	gpiod_direction_output(data->reset_gpiod, 0);
+-
+-	/* set to MMIO */
+-	val = SYS_CTR_PHY_MDIO_OE | SYS_CTR_APP_LTSSM_EN;
+-	if (false)
+-		val |= SYS_CTR_MM_IO_TYPE_IO | SYS_CTR_DIR_CFG_EN;
+-	else
+-		val |= SYS_CTR_TRAN_EN | SYS_CTR_MM_IO_TYPE_MM | SYS_CTR_PHY_MDIO_RSTN | SYS_CTR_INDIR_CFG_EN;
+-	writel(val, data->ctrl_base + REG_SYS_CTR);
+-	mdelay(50);
+-
+-	/* #Link initial setting */
+-	writel(0x00010120, data->ctrl_base + 0x710);
+-
+-	ret = readl_relaxed_poll_timeout(data->ctrl_base + REG_MAC_ST, val, (val & MAC_ST_XMLH_LINK_UP), 10, 60000);
+-	if (ret) {
+-		/*
+-		 * run28: bail out like the vendor driver does (reset the block
+-		 * and drop the clock) instead of returning success on a dead
+-		 * link -- otherwise pci_host_probe() fires config reads into a
+-		 * linkless port, and an indirect cfg cycle that never completes
+-		 * can stall the whole boot. An empty slot must be harmless.
+-		 */
+-		dev_err(&data->pdev->dev, "link down (0x%08x)\n", val);
+-		ret = -ENODEV;
++	ret = rtd129x_pcie_link_bringup(data);
++	if (ret)
+ 		goto err_disable_clk;
+-	}
+-
+-	writel_relaxed(data->cfg_res->start, data->ctrl_base + REG_PCI_BASE);
+-	writel(~(resource_size(data->cfg_res) - 1), data->ctrl_base + REG_PCI_MASK);
+-
+-	if (data->trans_res)
+-		writel(data->trans_res->start, data->ctrl_base + REG_PCI_TRANS);
+-
+-	dev_dbg(&data->pdev->dev, "base 0x%08x (0x%08x) -> 0x%08x\n",
+-		readl_relaxed(data->ctrl_base + REG_PCI_BASE),
+-		readl_relaxed(data->ctrl_base + REG_PCI_MASK),
+-		readl_relaxed(data->ctrl_base + REG_PCI_TRANS));
+-
+-	/* Prevent PCIe hang if dllp error occurs */
+-	val = FIELD_PREP(DIR_EN_TIMEOUT_CNT_VALUE,
+-			 (data->info->cap & RTD129X_PCIE_CAP_PCIE_2_0) ? 0x10000 : 0x2000) |
+-	      DIR_EN_TIMEOUT_EN;
+-	writel_relaxed(val, data->ctrl_base + REG_DIR_EN);
+-
+-	val = readl_relaxed(data->ctrl_base + REG_PHY_CTR);
+-	dev_info(&data->pdev->dev, "PHY_CTR 0x%08x\n", val);
+-	val &= ~PHY_CTR_REG_PLLDVR;
+-	val |= PHY_CTR_RX50_LINK | PHY_CTR_POW_PCIEX | PHY_CTR_REG_PLLDVR_ON_HOST;
+-	writel_relaxed(val, data->ctrl_base + REG_PHY_CTR);
+-
+-	rtd129x_pcie_link_init(data);
+ 
+ 	return 0;
+ 
+@@ -1176,6 +1259,10 @@ static int rtd129x_pcie_probe(struct platform_device *pdev)
+ 		return ret;
+ 	}
+ 
++	WRITE_ONCE(data->retrain_armed, true);
++	if (device_create_file(&pdev->dev, &dev_attr_retrain))
++		dev_warn(&pdev->dev, "could not create retrain attribute\n");
++
+ #ifdef CONFIG_HOTPLUG_PCI
+ 	ret = rtd129x_pcie_init_hotplug(data);
+ 	if (ret) {

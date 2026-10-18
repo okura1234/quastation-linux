@@ -11,6 +11,7 @@ mainline **v7.2.11** に当てると Qua Station（RTD1295）で起動する一�
 | `0003-*.patch` | PCIe の MSI を無効化（INTx 経路）。切り分け用に入れたまま。Wi-Fi の死因は MSI ではなかったので戻せる見込み（未確認） |
 | `0004-*.patch` | `pcie-rtd129x` の `alloc_workqueue` に `WQ_PERCPU`（7.x の WARNING 対策） |
 | `0005-*.patch` | **rtlwifi の workqueue を per-CPU に戻す。これが無いと Wi-Fi の if up で無言ハング→再起動ループ**（7.x 上流の `WQ_UNBOUND` 化が原因。rtw88 の同型変更は上流で revert 済み） |
+| `0006-*.patch` | **PCIe host の自動リンク再トレーニング**。2.4GHz 側（RTL8192EE）のリンクが列挙後に落ちる個体差（6.18/7.2 共通・約 1/3 の起動で発生）に対し、cfg アクセスの timeout が 3 回続いたら EP をリセットして再トレーニング→再列挙する。手動は `echo 1 > /sys/bus/platform/devices/9804e000.pci/retrain`（実測 0.3 秒で復帰） |
 | `../config-7.2.11-7x05` | 実機で動かしている `.config`（稼働機の 6.18 config を `olddefconfig` したもの。`CONFIG_CMDLINE` の `root=` は自分の環境に合わせること） |
 
 ## 当て方
@@ -30,7 +31,7 @@ uImage 化（`text_offset` の書き換え・末尾パディング）は 6.18 �
 ## 既知の事項
 
 - `r8169soc`（内蔵 GMAC）は NETPOLL 有効時に 7.2 でコンパイルが通らないため config で無効化しています。副作用で USB-LAN の名前が `eth1`→`eth0` になります（`.network` を MAC 一致にしておけば実害なし）
-- 2.4 GHz（RTL8192EE）が起動時に `Unable to change power state from D3cold to D0` で probe に失敗する回があります（1 回観測・追跡中）
+- 2.4 GHz（RTL8192EE）の PCIe リンクが列挙後に落ちることがあります（6.18 でも発生・約 1/3 の起動）。`0006` の自動再トレーニングで復帰する想定（手動トリガは実機確認済み・自動発火は観測待ち）
 - 6.18 で必要だった「5 GHz をベンダー 8812ae.ko にバインドし直す service」は 7.2 では不要でした（mainline `rtl8821ae` で接続）
 - initramfs の `init` は busybox `findfs` が `PARTUUID=` を解釈しない問題を直した版（`kernel/initramfs/init`）を使ってください
 
