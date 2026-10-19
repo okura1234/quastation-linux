@@ -62,7 +62,22 @@ RTD1295 対応は約 1.8 万行のほぼ純粋な追加なので、6.18 → 7.2 
    ```bash
    sudo tools/flash-ssd.sh /dev/sdX quastation-ubuntu2604-rootfs.tar.gz   # sdX = SSD。全消去
    ```
-   1 パーティション・ext4・ラベル `qua-root` になります。
+   出来上がる SSD はこれだけです（パーティションは 1 つ。swap は区画ではなく root 上の `/swapfile` と zram）:
+
+   ```text
+   /dev/sdX   msdos ラベル
+   └─ sdX1    ext4  LABEL=qua-root   1MiB〜末尾   ← rootfs。カーネルは cmdline の root=LABEL=qua-root でこれを探す
+   ```
+
+   カーネル・DTB は SSD には置きません（U-Boot が読むのは USB の `BOOT` 区画だけ）。
+   手で作るなら `parted mklabel msdos mkpart primary ext4 1MiB 100%` → `mkfs.ext4 -L qua-root` → tar 展開（`--keep-directory-symlink` 必須）と同じことです。
+
+   起動 USB 側も 1 区画です:
+
+   ```text
+   /dev/sdY   msdos ラベル
+   └─ sdY1    FAT32 LABEL=BOOT   uImage / QuaStation.dtb（+ 任意で wpa_supplicant.conf）
+   ```
 2. **起動 USB を作る**（PC で）
    ```bash
    sudo tools/make-boot-usb.sh /dev/sdY uImage QuaStation.dtb              # sdY = USB メモリ。全消去

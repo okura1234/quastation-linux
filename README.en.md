@@ -27,6 +27,16 @@ eMMC ❌ (not detected on 6.18; vendor U-Boot only boots from USB anyway) · 11 
 
 ## Install
 1. `sudo tools/flash-ssd.sh /dev/sdX quastation-ubuntu2604-rootfs.tar.gz` — erases the SSD, one ext4 partition labelled `qua-root`.
+   Resulting layout (that is all of it; swap is a `/swapfile` on root plus zram, not a partition):
+   ```text
+   /dev/sdX   msdos label
+   └─ sdX1    ext4  LABEL=qua-root   1MiB..end   <- rootfs; the kernel finds it via root=LABEL=qua-root
+   ```
+   The kernel and DTB never live on the SSD; U-Boot only reads the `BOOT` partition of the USB stick:
+   ```text
+   /dev/sdY   msdos label
+   └─ sdY1    FAT32 LABEL=BOOT   uImage / QuaStation.dtb (+ optional wpa_supplicant.conf)
+   ```
 2. `sudo tools/make-boot-usb.sh /dev/sdY uImage QuaStation.dtb` — erases the USB stick, FAT32 labelled `BOOT`.
    Optionally drop a `wpa_supplicant.conf` on it (template in `overlay/etc/wpa_supplicant/`); it is imported on first boot.
 3. Insert SSD and USB stick, plug a USB Ethernet adapter (Realtek RTL8153 recommended) into your router, power on.
