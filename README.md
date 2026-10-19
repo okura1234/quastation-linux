@@ -1,9 +1,21 @@
-# Qua Station (au HVD1 / RTD1295) — mainline Linux 6.18 + Ubuntu 26.04
+# Qua Station (au HVD1 / RTD1295) — mainline Linux 7.3 / 6.18 LTS + Ubuntu 26.04
 
 > ⚠️ **状態: v0.1 (pre-release)**。この配布セットは稼働中の実機（同じカーネル設定・同じ DTB・同じ構成の手組み rootfs）から再構成したものですが、**配布イメージそのものでの実機起動はまだ検証していません**。試した結果は Issue で知らせてもらえると助かります。
 
-au **Qua Station (HVD1, Realtek RTD1295)** を、ベンダー 4.9 カーネルではなく **mainline 系 Linux 6.18 LTS** と
+au **Qua Station (HVD1, Realtek RTD1295)** を、ベンダー 4.9 カーネルではなく **mainline Linux**（主系統 **7.3**、安定系統 **6.18 LTS**）と
 **Ubuntu 26.04 (arm64)** で動かすための配布セットです。ハードウェアはひととおり Linux から使える状態にしてあります。
+
+## カーネルの系統（2026-10-19〜）
+
+| 系統 | 版 | 位置づけ | 置き場 |
+|---|---|---|---|
+| **主系統** | **7.3**（`7.3.0-7x07`） | 実機で稼働中。新しい stable が出たらこの差分を当て直す | 素の v7.3 ＋ [`kernel/patches-7.3.0/`](kernel/patches-7.3.0/)（8 本・`git am --3way` で当たることを確認済み）＋ [`kernel/config-7.3.0-7x07`](kernel/config-7.3.0-7x07) |
+| 経由 | 7.2.11 | 7.3 の前段。パッチは 7.3 用と `0008` 以外同じ | [`kernel/patches-7.2.11/`](kernel/patches-7.2.11/) |
+| 安定系統・戻し先 | 6.18 LTS（`6.18.56`） | 配布イメージの uImage はこちら。7.x で困ったときの戻り道 | fork [`okura1234/monarch-6.18`](https://github.com/okura1234/monarch-6.18) ブランチ `qua-dist-6.18.56` ＋ [`kernel/config-6.18.52-qua1`](kernel/config-6.18.52-qua1) |
+
+7.x は「素の mainline にパッチを当てる」形、6.18 は「symops/monarch-6.18 の fork」形で、持ち方が違います。
+RTD1295 対応は約 1.8 万行のほぼ純粋な追加なので、6.18 → 7.2 は衝突 4 件・API 修正 5 件、7.2 → 7.3 は衝突 0・API 修正 1 件で済みました。
+**7.3 にして良くなるところは、この機体では特にありません**（ADS-B の受信もネットワークも同じ）。上げる理由は「次の LTS に乗り換えられる状態を保つ」ことです。
 
 [English README](README.en.md) ／ 解説記事（導入手順）: [Qiita 導入記録（6）配布イメージ公開編](https://qiita.com/kaz32/items/9984c6e11d5331066a3e)
 
@@ -24,18 +36,18 @@ au **Qua Station (HVD1, Realtek RTD1295)** を、ベンダー 4.9 カーネル�
 | Mali GPU | — | ヘッドレス前提。未対応 |
 
 
-## 🧪 Linux 7.2 への移植（実験的・2026-10-18）
+## 7.x で 6.18 と違うところ
 
-mainline **7.2.11** でも起動・稼働することを実機で確認しました（SATA root・USB・RTL-SDR・Bluetooth・Wi-Fi 5 GHz・Docker 13 コンテナ）。
-パッチ列と config は [`kernel/patches-7.2.11/`](kernel/patches-7.2.11/) にあります。
-Wi-Fi が起動時に無言ハングする問題は上流 rtlwifi の `WQ_UNBOUND` 化が原因で、`0005` のパッチで回避しています。
-配布イメージ（uImage/rootfs）は引き続き 6.18 系です。
+- Wi-Fi 5 GHz は mainline `rtl8821ae` でそのまま繋がる（6.18 で要ったベンダー `8812ae.ko` へのバインドし直し service は不要）
+- 内蔵 GMAC（`r8169soc`）は config で無効。USB-LAN が `eth0` になる（`.network` は MAC 一致なので実害なし）
+- Wi-Fi が起動時に無言ハングする問題（上流 rtlwifi の `WQ_UNBOUND` 化）は `0005` で回避
+- 2.4 GHz 側の PCIe リンク落ち（6.18 でも起きる個体差）に `0006`/`0007` の自動再トレーニングを追加
 
 ## 配布物
 
 | ファイル | 内容 |
 |---|---|
-| `uImage` | カーネル 6.18.52-qua1（initramfs 内蔵、raw arm64 Image を U-Boot 向けにヘッダ調整済み） |
+| `uImage` | カーネル 6.18.52-qua1（安定系統・initramfs 内蔵、raw arm64 Image を U-Boot 向けにヘッダ調整済み）。7.3 の uImage は自分でビルド（下記） |
 | `QuaStation.dtb` | Qua Station 用 Device Tree |
 | `quastation-ubuntu2604-rootfs.tar.gz` | Ubuntu 26.04 root filesystem（モジュール・ファームウェア・起動用サービス込み） |
 | `tools/flash-ssd.sh` | SSD を 1 パーティションで初期化して rootfs を展開 |
@@ -90,11 +102,15 @@ uart1 のピンを有効化し、`rtk-bluetooth.service` が `rtk_hciattach` で
 
 ## 自分でビルドする
 ```bash
-# カーネル（ホスト: Ubuntu 26.04 x86_64, gcc-aarch64-linux-gnu）
-git clone -b qua-dist-6.18.56 https://github.com/okura1234/monarch-6.18 linux-qua   # symops/monarch-6.18 の fork（6.18.56 追従版。旧 qua-dist は 6.18.52）
-build/build-kernel.sh linux-qua out/kernel
+# カーネル 7.3（主系統。ホスト: Ubuntu 26.04 x86_64, gcc-aarch64-linux-gnu）
+git clone --depth=1 -b v7.3 https://github.com/gregkh/linux.git linux-7.3
+(cd linux-7.3 && git am --3way ../kernel/patches-7.3.0/*.patch)
+build/build-kernel.sh linux-7.3 out/kernel                    # 既定 config = kernel/config-7.3.0-7x07
+# カーネル 6.18（安定系統）
+git clone -b qua-dist-6.18.56 https://github.com/okura1234/monarch-6.18 linux-qua
+build/build-kernel.sh linux-qua out/kernel kernel/config-6.18.52-qua1
 # rootfs（qemu-user-binfmt が必要）
-sudo build/build-rootfs.sh ubuntu-base-26.04.1-base-arm64.tar.gz out/kernel/modules/lib/modules/6.18.52-qua1+ out/rootfs
+sudo build/build-rootfs.sh ubuntu-base-26.04.1-base-arm64.tar.gz out/kernel/modules/lib/modules/<release> out/rootfs
 ```
 `DIST_USER` / `DIST_PASS` 環境変数で初期ユーザーを変えられます。
 

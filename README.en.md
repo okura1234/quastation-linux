@@ -1,4 +1,4 @@
-# Qua Station (au HVD1 / RTD1295) — mainline Linux 6.18 + Ubuntu 26.04
+# Qua Station (au HVD1 / RTD1295) — mainline Linux 7.3 / 6.18 LTS + Ubuntu 26.04
 
 > ⚠️ **Status: v0.1 (pre-release).** Rebuilt from a running unit (same kernel config, same DTB, hand-built rootfs of the same shape), but **this exact image has not yet been boot-tested on hardware**. Reports welcome via Issues.
 
@@ -6,6 +6,15 @@ Distribution kit that runs the au **Qua Station (HVD1, Realtek RTD1295)** on a *
 **Ubuntu 26.04 (arm64)** instead of the vendor 4.9 kernel. All on-board hardware that is reachable from Linux is enabled.
 
 Japanese walkthrough: [Qiita (6)](https://qiita.com/kaz32/items/9984c6e11d5331066a3e)
+
+## Kernel lines (since 2026-10-19)
+
+| line | version | role | where |
+|---|---|---|---|
+| **main** | **7.3** (`7.3.0-7x07`) | running on the real box; re-applied onto each new stable | vanilla v7.3 + [`kernel/patches-7.3.0/`](kernel/patches-7.3.0/) (8 patches, verified with `git am --3way`) + `kernel/config-7.3.0-7x07` |
+| stable / fallback | 6.18 LTS | the distributed uImage is still this line | fork [`okura1234/monarch-6.18`](https://github.com/okura1234/monarch-6.18), branch `qua-dist-6.18.56` |
+
+Nothing gets noticeably better on this box with 7.3; the point is staying on a line that can move to the next LTS.
 
 ## Hardware status
 CPU 4× A53 / 2 GB ✅ · SATA bay ✅ (root lives here, found by `LABEL=qua-root`) · USB 3.0 ×2 + USB 2.0 ✅ · Wi-Fi 5 GHz RTL8812AE ✅ (`rtl8821ae`) ·

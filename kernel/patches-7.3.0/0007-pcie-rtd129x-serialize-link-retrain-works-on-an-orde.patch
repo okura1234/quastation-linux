@@ -1,0 +1,51 @@
+From e7d765bda8403dda781292d1c72b3c28e75e3fc2 Mon Sep 17 00:00:00 2001
+From: kazu <kazu@dynabook.local>
+Date: Sun, 18 Oct 2026 23:37:36 +0900
+Subject: [PATCH 7/7] pcie-rtd129x: serialize link/retrain works on an ordered
+ wq; arm retrain only after host probe (review findings)
+
+---
+ drivers/pci/controller/pcie-rtd129x.c | 6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/pci/controller/pcie-rtd129x.c b/drivers/pci/controller/pcie-rtd129x.c
+index 67cf4b8153..c32128d6b5 100644
+--- a/drivers/pci/controller/pcie-rtd129x.c
++++ b/drivers/pci/controller/pcie-rtd129x.c
+@@ -179,6 +179,7 @@ struct rtd129x_pcie_priv {
+ 	struct work_struct retrain_work;	/* 7x06: cfg timeout 連続時のリンク再トレーニング */
+ 	unsigned int cfg_timeouts;
+ 	unsigned long last_retrain;
++	bool retrain_armed;		/* pci_host_probe 完了後に true（初回列挙中は発火させない） */
+ 	int irq;
+ 	int gen;
+ 	u32 quirks;
+@@ -331,7 +332,7 @@ static DEVICE_ATTR_WO(retrain);
+ /* cfg アクセスの timeout が続いたら再トレーニングを予約する（atomic 文脈から呼ばれる） */
+ static void rtd129x_pcie_note_cfg_timeout(struct rtd129x_pcie_priv *data)
+ {
+-	if (++data->cfg_timeouts >= 3 && data->wq)
++	if (++data->cfg_timeouts >= 3 && data->wq && READ_ONCE(data->retrain_armed))
+ 		queue_work(data->wq, &data->retrain_work);
+ }
+ 
+@@ -838,7 +839,7 @@ static int rtd129x_pcie_init_irq(struct rtd129x_pcie_priv *data)
+ 			return ret;
+ 	}
+ 
+-	data->wq = alloc_workqueue("rtd129x_pcie_wq", WQ_FREEZABLE | WQ_MEM_RECLAIM | WQ_PERCPU, 0);
++	data->wq = alloc_ordered_workqueue("rtd129x_pcie_wq", WQ_FREEZABLE | WQ_MEM_RECLAIM);	/* 7x06: link_work と retrain_work を直列化 */
+ 	INIT_WORK(&data->link_work, rtd129x_pcie_link_changed);
+ 	INIT_WORK(&data->retrain_work, rtd129x_pcie_retrain_work);
+ 
+@@ -1258,6 +1259,7 @@ static int rtd129x_pcie_probe(struct platform_device *pdev)
+ 		return ret;
+ 	}
+ 
++	WRITE_ONCE(data->retrain_armed, true);
+ 	if (device_create_file(&pdev->dev, &dev_attr_retrain))
+ 		dev_warn(&pdev->dev, "could not create retrain attribute\n");
+ 
+-- 
+2.53.0
+

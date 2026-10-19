@@ -1,0 +1,40 @@
+From 463f2a21aabd8321ffc62e16da4cbbbfefa2dcef Mon Sep 17 00:00:00 2001
+From: kazu <kazu@dynabook.local>
+Date: Mon, 19 Oct 2026 22:20:17 +0900
+Subject: [PATCH] 7.3 port: irq_domain_add_linear removed ->
+ irq_domain_create_linear(of_fwnode_handle())
+
+---
+ drivers/irqchip/irq-rtd129x.c         | 2 +-
+ drivers/pci/controller/pcie-rtd129x.c | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/irqchip/irq-rtd129x.c b/drivers/irqchip/irq-rtd129x.c
+index 38bb9e351e..83db6dd62c 100644
+--- a/drivers/irqchip/irq-rtd129x.c
++++ b/drivers/irqchip/irq-rtd129x.c
+@@ -287,7 +287,7 @@ static int __init mux_of_init(struct device_node *np,
+ 	 * Modern kernels use dynamic IRQ allocation; keep the same DT xlate
+ 	 * scheme but let the core allocate virq numbers.
+ 	 */
+-	rtk_domain = irq_domain_add_linear(np, nr_irq * IRQ_INMUX,
++	rtk_domain = irq_domain_create_linear(of_fwnode_handle(np), nr_irq * IRQ_INMUX,
+ 					   &mux_irq_domain_ops, mux_data);
+ 
+ 	if (!rtk_domain)
+diff --git a/drivers/pci/controller/pcie-rtd129x.c b/drivers/pci/controller/pcie-rtd129x.c
+index c32128d6b5..ec8bebb18f 100644
+--- a/drivers/pci/controller/pcie-rtd129x.c
++++ b/drivers/pci/controller/pcie-rtd129x.c
+@@ -815,7 +815,7 @@ static int rtd129x_pcie_init_irq(struct rtd129x_pcie_priv *data)
+ 
+ 	node = of_get_child_by_name(data->pdev->dev.of_node, "interrupt-controller");
+ 	if (node) {
+-		data->intx_irq_domain = irq_domain_add_linear(node, 4,
++		data->intx_irq_domain = irq_domain_create_linear(of_fwnode_handle(node), 4,
+ 							      &rtd129x_pcie_intx_domain_ops, data);
+ 		of_node_put(node);
+ 		if (!data->intx_irq_domain)
+-- 
+2.53.0
+

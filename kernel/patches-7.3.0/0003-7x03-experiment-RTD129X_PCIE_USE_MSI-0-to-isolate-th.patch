@@ -1,0 +1,26 @@
+From 79577f8e3009617b9270ed8ff8d0ea3cc9b98ba9 Mon Sep 17 00:00:00 2001
+From: kazu <kazu@dynabook.local>
+Date: Sun, 18 Oct 2026 22:20:20 +0900
+Subject: [PATCH 3/5] 7x03 experiment: RTD129X_PCIE_USE_MSI=0 to isolate the
+ msi_parent_ops port
+
+---
+ drivers/pci/controller/pcie-rtd129x.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/pci/controller/pcie-rtd129x.c b/drivers/pci/controller/pcie-rtd129x.c
+index 82b76a5f0..582952906 100644
+--- a/drivers/pci/controller/pcie-rtd129x.c
++++ b/drivers/pci/controller/pcie-rtd129x.c
+@@ -135,7 +135,7 @@
+ 
+ #define LINK_ST_LINK_UP_ST		BIT(0)
+ 
+-#define RTD129X_PCIE_USE_MSI		1
++#define RTD129X_PCIE_USE_MSI		0	/* 7x03: MSI 切り分け。INTx 経路で起動するか見る（6.18 では INTx フォールバック実績あり） */
+ 
+ #define RTD129X_PCIE_QUIRK_SB4		BIT(0)
+ #define RTD129X_PCIE_QUIRK_PHY_A	BIT(1)
+-- 
+2.53.0
+
