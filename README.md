@@ -47,7 +47,7 @@ RTD1295 対応は約 1.8 万行のほぼ純粋な追加なので、6.18 → 7.2 
 
 | ファイル | 内容 |
 |---|---|
-| `uImage` | カーネル 6.18.52-qua1（安定系統・initramfs 内蔵、raw arm64 Image を U-Boot 向けにヘッダ調整済み）。7.3 の uImage は自分でビルド（下記） |
+| `uImage` | **v0.2.0: カーネル 7.3.0-qua1**（主系統。`modules-7.3.0-qua1.tar.gz` を rootfs に展開して使う）／ v0.1.0: 6.18.52-qua1（安定系統）。どちらも initramfs 内蔵、raw arm64 Image を U-Boot 向けにヘッダ調整済み |
 | `QuaStation.dtb` | Qua Station 用 Device Tree |
 | `quastation-ubuntu2604-rootfs.tar.gz` | Ubuntu 26.04 root filesystem（モジュール・ファームウェア・起動用サービス込み） |
 | `tools/flash-ssd.sh` | SSD を 1 パーティションで初期化して rootfs を展開 |
