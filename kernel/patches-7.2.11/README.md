@@ -35,4 +35,4 @@ uImage 化（`text_offset` の書き換え・末尾パディング）は 6.18 �
 - 6.18 で必要だった「5 GHz をベンダー 8812ae.ko にバインドし直す service」は 7.2 では不要でした（mainline `rtl8821ae` で接続）
 - initramfs の `init` は busybox `findfs` が `PARTUUID=` を解釈しない問題を直した版（`kernel/initramfs/init`）を使ってください
 
-経緯と切り分けの詳細: Qiita 導入記録（7）Linux 7.2 移植編（公開後にリンク）
+経緯と切り分けの詳細: [Qiita 導入記録（7）Linux 7.2→7.3 移植編](https://qiita.com/kaz32/items/6e37a54b2a68b7f5e27d)

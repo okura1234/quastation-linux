@@ -17,7 +17,7 @@ au **Qua Station (HVD1, Realtek RTD1295)** を、ベンダー 4.9 カーネル�
 RTD1295 対応は約 1.8 万行のほぼ純粋な追加なので、6.18 → 7.2 は衝突 4 件・API 修正 5 件、7.2 → 7.3 は衝突 0・API 修正 1 件で済みました。
 **7.3 にして良くなるところは、この機体では特にありません**（ADS-B の受信もネットワークも同じ）。上げる理由は「次の LTS に乗り換えられる状態を保つ」ことです。
 
-[English README](README.en.md) ／ 解説記事（導入手順）: [Qiita 導入記録（6）配布イメージ公開編](https://qiita.com/kaz32/items/9984c6e11d5331066a3e)
+[English README](README.en.md) ／ 解説記事: [Qiita 導入記録（6）配布イメージ公開編](https://qiita.com/kaz32/items/9984c6e11d5331066a3e) ／ [（7）Linux 7.2→7.3 移植編](https://qiita.com/kaz32/items/6e37a54b2a68b7f5e27d)
 
 ## 何が動くか
 

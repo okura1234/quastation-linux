@@ -40,4 +40,4 @@ uImage 化（`text_offset` の書き換え・末尾パディング）は `build/
 - 7.3 で良くなるところは、この機体に関しては**特にありません**。上げる理由は「次の LTS に乗り換えられる状態を保つ」「セキュリティ修正が届く側にいる」の 2 つです
 - initramfs の `init` は busybox `findfs` が `PARTUUID=` を解釈しない問題を直した版（`kernel/initramfs/init`）を使ってください
 
-経緯と切り分けの詳細: Qiita 導入記録（7）Linux 7.2→7.3 移植編（公開後にリンク）
+経緯と切り分けの詳細: [Qiita 導入記録（7）Linux 7.2→7.3 移植編](https://qiita.com/kaz32/items/6e37a54b2a68b7f5e27d)
